@@ -118,3 +118,4 @@ export_smplx_gt/
 export_smplx_gt_retargeted/
 OMOMO_DATA/
 **/__pycache__
+figures/
