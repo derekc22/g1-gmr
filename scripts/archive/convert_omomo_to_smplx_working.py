@@ -48,12 +48,26 @@ for motion_data in [all_motion_data1, all_motion_data2]:
 
         obj_rot = smpl_data.get("obj_rot", None)
         if obj_rot is not None:
-            object_rot = np.asarray(obj_rot, dtype=np.float32).reshape(num_frames, 3, 3)
+            # obj_rot has form (not including num_frames dim)
+            # x1 x2 x3
+            # y1 y2 y3
+            # z1 z2 z3
+            obj_rot_np = np.asarray(obj_rot, dtype=np.float32).reshape(num_frames, 3, 3)
+
+            first_two_cols = obj_rot_np[:, :, :2]
+
+            # flattening first_two_cols to (num_frames, 6) would produce [x1, x2, y1, y2, z1, z2], which is NOT what rotation.py expects
+            # this is because pytorch flattens in the order of the dimensions (ie row-wise first then column-wise)
+            # instead rotation.py expects [x1, y1, z1, x2, y2, z2], so we 
+            # Transpose to (N, 2, 3) so that flattening puts column 1 first, then column 2
+            first_two_cols = np.transpose(first_two_cols, (0, 2, 1))
+
+            object_rot_6d = first_two_cols.reshape(num_frames, 6)
         else:
-            object_rot = np.zeros((num_frames, 3, 3), dtype=np.float32)
+            object_rot_6d = np.zeros((num_frames, 6), dtype=np.float32)
 
         smpl_data["object_pos"] = object_pos.astype(np.float32)
-        smpl_data["object_rot"] = object_rot.astype(np.float32)
+        smpl_data["object_rot_6d"] = object_rot_6d.astype(np.float32)
         
         # use pickle to save
         with open(f"{target_dir}/{seq_name}.pkl", "wb") as f:

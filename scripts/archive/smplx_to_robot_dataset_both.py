@@ -142,7 +142,17 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
         os.path.splitext(os.path.basename(smplx_file_path))[0],
     )
 
-    motion_data = {
+    motion_data_quat = {
+        "fps": aligned_fps,
+        "root_pos": root_pos,
+        "root_rot": root_rot,
+        "dof_pos": dof_pos,
+        "local_body_pos": local_body_pos.detach().cpu().numpy(),
+        "link_body_list": body_names,
+        "seq_name": seq_name,
+    }
+
+    motion_data_rot_6d = {
         "fps": aligned_fps,
         "root_pos": root_pos,
         "root_rot": root_rot,
@@ -161,26 +171,54 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
         if ROOT_ORIGIN_OFFSET:
             obj_pos[:, :2] += xy_offset
 
-        motion_data["object_pos"] = np.asarray(obj_pos, dtype=np.float32)
+        motion_data_quat["object_pos"] = np.asarray(obj_pos, dtype=np.float32)
+        motion_data_rot_6d["object_pos"] = np.asarray(obj_pos, dtype=np.float32)
 
-    obj_rot = smplx_data.get("object_rot", None)
-    if obj_rot is not None:
-        from rotation import mat_to_quat_xyzw
-        obj_rot = np.asarray(obj_rot, dtype=np.float32)
-        obj_rot_t = torch.from_numpy(obj_rot).float().to(device)
-        obj_quat_xyzw = mat_to_quat_xyzw(obj_rot_t).cpu().numpy()
-        motion_data["object_rot"] = obj_quat_xyzw
+    obj_rot_6d = smplx_data.get("object_rot_6d", None)
+    if obj_rot_6d is not None:
+        from rotation import rot6d_to_quat_xyzw
+
+        motion_data_rot_6d["object_rot_6d"] = np.asarray(obj_rot_6d, dtype=np.float32)
+
+        obj_rot6d = np.asarray(obj_rot_6d, dtype=np.float32)
+        obj_rot6d_t = torch.from_numpy(obj_rot6d).float().to(device)
+        obj_quat_xyzw = rot6d_to_quat_xyzw(obj_rot6d_t).cpu().numpy()
+        motion_data_quat["object_rot"] = obj_quat_xyzw
 
 
-    os.makedirs(os.path.dirname(tgt_file_path), exist_ok=True)
-    with open(tgt_file_path, "wb") as f:
-        pickle.dump(motion_data, f)
+    # Split into directory and filename
+    directory, filename = os.path.split(tgt_file_path)
+
+    # Split the directory into parent and last folder
+    parent_dir, last_dir = os.path.split(directory)
+
+    # Rebuild the folder
+    tgt_folder_quat = os.path.join(parent_dir, last_dir + "_quat")
+    tgt_folder_rot_6d = os.path.join(parent_dir, last_dir + "_rot_6d")
+
+    # Rebuild the full path
+    tgt_file_path_quat = os.path.join(tgt_folder_quat, filename)
+    tgt_file_path_rot_6d = os.path.join(tgt_folder_rot_6d, filename)
+
+    os.makedirs(os.path.dirname(tgt_file_path_quat), exist_ok=True)
+    with open(tgt_file_path_quat, "wb") as f:
+        pickle.dump(motion_data_quat, f)
+
+    os.makedirs(os.path.dirname(tgt_file_path_rot_6d), exist_ok=True)
+    with open(tgt_file_path_rot_6d, "wb") as f:
+        pickle.dump(motion_data_rot_6d, f)
+
         
     # Progress print based on tgt_folder
     done = 0
-    for root, _, files in os.walk(tgt_folder):
+    for root, _, files in os.walk(tgt_folder_quat):
         done += len([f for f in files if f.endswith('.pkl')])
-    print(f"Processed {done}/{total_files}: {tgt_file_path}")
+    print(f"Processed {done}/{total_files}: {tgt_file_path_quat}")
+
+    done = 0
+    for root, _, files in os.walk(tgt_folder_rot_6d):
+        done += len([f for f in files if f.endswith('.pkl')])
+    print(f"Processed {done}/{total_files}: {tgt_file_path_rot_6d}")
     
     if verbose:
         # Get memory snapshot
