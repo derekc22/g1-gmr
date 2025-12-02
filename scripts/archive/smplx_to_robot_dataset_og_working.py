@@ -115,10 +115,6 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
 
     body_names = kinematics_model.body_names
     
-    # Initialize offsets
-    z_offset = 0.0
-    xy_offset = np.zeros(2, dtype=np.float32)
-    
     HEIGHT_ADJUST = True
     if HEIGHT_ADJUST:
         # height adjust to ensure the lowerset part is on the ground
@@ -127,14 +123,12 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
                                                         torch.from_numpy(dof_pos).to(device=device, dtype=torch.float)) # TxNx3
         ground_offset = 0.0
         lowerst_height = torch.min(body_pos[..., 2]).item()
-        z_offset = -lowerst_height + ground_offset
-        root_pos[:, 2] = root_pos[:, 2] + z_offset # make sure motion on the ground
+        root_pos[:, 2] = root_pos[:, 2] - lowerst_height + ground_offset # make sure motion on the ground
         
     ROOT_ORIGIN_OFFSET = True
     if ROOT_ORIGIN_OFFSET:
         # offset using the first frame
-        xy_offset = -root_pos[0, :2].copy()
-        root_pos[:, :2] += xy_offset
+        root_pos[:, :2] -= root_pos[0, :2]
         
         
     seq_name = smplx_data.get(
@@ -154,22 +148,11 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
 
     obj_pos = smplx_data.get("object_pos", None)
     if obj_pos is not None:
-
-        # Apply offsets
-        if HEIGHT_ADJUST:
-            obj_pos[:, 2] += z_offset
-        if ROOT_ORIGIN_OFFSET:
-            obj_pos[:, :2] += xy_offset
-
         motion_data["object_pos"] = np.asarray(obj_pos, dtype=np.float32)
 
-    obj_rot = smplx_data.get("object_rot", None)
-    if obj_rot is not None:
-        from rotation import mat_to_quat_xyzw
-        obj_rot = np.asarray(obj_rot, dtype=np.float32)
-        obj_rot_t = torch.from_numpy(obj_rot).float().to(device)
-        obj_quat_xyzw = mat_to_quat_xyzw(obj_rot_t).cpu().numpy()
-        motion_data["object_rot"] = obj_quat_xyzw
+    obj_rot_6d = smplx_data.get("object_rot_6d", None)
+    if obj_rot_6d is not None:
+        motion_data["object_rot_6d"] = np.asarray(obj_rot_6d, dtype=np.float32)
 
 
     os.makedirs(os.path.dirname(tgt_file_path), exist_ok=True)

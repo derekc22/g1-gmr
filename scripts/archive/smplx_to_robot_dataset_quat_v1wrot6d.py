@@ -163,12 +163,12 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
 
         motion_data["object_pos"] = np.asarray(obj_pos, dtype=np.float32)
 
-    obj_rot = smplx_data.get("object_rot", None)
-    if obj_rot is not None:
-        from rotation import mat_to_quat_xyzw
-        obj_rot = np.asarray(obj_rot, dtype=np.float32)
-        obj_rot_t = torch.from_numpy(obj_rot).float().to(device)
-        obj_quat_xyzw = mat_to_quat_xyzw(obj_rot_t).cpu().numpy()
+    obj_rot_6d = smplx_data.get("object_rot_6d", None)
+    if obj_rot_6d is not None:
+        from rotation import rot6d_to_quat_xyzw
+        obj_rot6d = np.asarray(obj_rot_6d, dtype=np.float32)
+        obj_rot6d_t = torch.from_numpy(obj_rot6d).float().to(device)
+        obj_quat_xyzw = rot6d_to_quat_xyzw(obj_rot6d_t).cpu().numpy()
         motion_data["object_rot"] = obj_quat_xyzw
 
 
