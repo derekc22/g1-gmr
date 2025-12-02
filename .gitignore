@@ -114,7 +114,7 @@ yaml_to_flat_csv.py
 # Custom
 assets/*
 download/
-export_smplx_gt/
-export_smplx_gt_retargeted/
+**/export_smplx_gt**
 OMOMO_DATA/
 **/__pycache__
+figures/

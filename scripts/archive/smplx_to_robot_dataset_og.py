@@ -50,14 +50,14 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
     # Initial checks (with optional logging)
     log_memory("Initial memory usage")
     
-    # num_pause = 0
-    # while check_memory():
-    #     print(f"[PAUSE] Paused processing {smplx_file_path} to prevent memory overflow. num_pause: {num_pause}")
-    #     time.sleep(60*2)
-    #     num_pause += 1
-    #     if num_pause > 10:
-    #         print(f"[ERROR] Memory usage is still high after 10 pauses. Exiting.")
-    #         return
+    num_pause = 0
+    while check_memory():
+        print(f"[PAUSE] Paused processing {smplx_file_path} to prevent memory overflow. num_pause: {num_pause}")
+        time.sleep(60*2)
+        num_pause += 1
+        if num_pause > 10:
+            print(f"[ERROR] Memory usage is still high after 10 pauses. Exiting.")
+            return
 
     try:
         smplx_data, body_model, smplx_output, actual_human_height = load_smplx_file(smplx_file_path, SMPLX_FOLDER)
@@ -115,10 +115,6 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
 
     body_names = kinematics_model.body_names
     
-    # Initialize offsets
-    z_offset = 0.0
-    xy_offset = np.zeros(2, dtype=np.float32)
-    
     HEIGHT_ADJUST = True
     if HEIGHT_ADJUST:
         # height adjust to ensure the lowerset part is on the ground
@@ -127,20 +123,13 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
                                                         torch.from_numpy(dof_pos).to(device=device, dtype=torch.float)) # TxNx3
         ground_offset = 0.0
         lowerst_height = torch.min(body_pos[..., 2]).item()
-        z_offset = -lowerst_height + ground_offset
-        root_pos[:, 2] = root_pos[:, 2] + z_offset # make sure motion on the ground
+        root_pos[:, 2] = root_pos[:, 2] - lowerst_height + ground_offset # make sure motion on the ground
         
     ROOT_ORIGIN_OFFSET = True
     if ROOT_ORIGIN_OFFSET:
         # offset using the first frame
-        xy_offset = -root_pos[0, :2].copy()
-        root_pos[:, :2] += xy_offset
+        root_pos[:, :2] -= root_pos[0, :2]
         
-        
-    seq_name = smplx_data.get(
-        "seq_name",
-        os.path.splitext(os.path.basename(smplx_file_path))[0],
-    )
 
     motion_data = {
         "fps": aligned_fps,
@@ -149,27 +138,7 @@ def process_file(smplx_file_path, tgt_file_path, tgt_robot, SMPLX_FOLDER, tgt_fo
         "dof_pos": dof_pos,
         "local_body_pos": local_body_pos.detach().cpu().numpy(),
         "link_body_list": body_names,
-        "seq_name": seq_name,
     }
-
-    obj_pos = smplx_data.get("object_pos", None)
-    if obj_pos is not None:
-
-        # Apply offsets
-        if HEIGHT_ADJUST:
-            obj_pos[:, 2] += z_offset
-        if ROOT_ORIGIN_OFFSET:
-            obj_pos[:, :2] += xy_offset
-
-        motion_data["object_pos"] = np.asarray(obj_pos, dtype=np.float32)
-
-    obj_rot = smplx_data.get("object_rot", None)
-    if obj_rot is not None:
-        from rotation import mat_to_quat_xyzw
-        obj_rot = np.asarray(obj_rot, dtype=np.float32)
-        obj_rot_t = torch.from_numpy(obj_rot).float().to(device)
-        obj_quat_xyzw = mat_to_quat_xyzw(obj_rot_t).cpu().numpy()
-        motion_data["object_rot"] = obj_quat_xyzw
 
 
     os.makedirs(os.path.dirname(tgt_file_path), exist_ok=True)
