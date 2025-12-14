@@ -118,3 +118,4 @@ download/
 OMOMO_DATA/
 **/__pycache__
 figures/
+export**

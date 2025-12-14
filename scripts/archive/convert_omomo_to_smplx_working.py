@@ -12,8 +12,8 @@ args = parser.parse_args()
 
 
 # these paths are from the original OMOMO dataset
-motion_path1 = "/home/learning/Documents/GMR-master/OMOMO_DATA/OMOMO_p_files/train_diffusion_manip_seq_joints24.p"
-motion_path2 = "/home/learning/Documents/GMR-master/OMOMO_DATA/OMOMO_p_files/test_diffusion_manip_seq_joints24.p"
+motion_path1 = "/home/learning/Documents/g1-gmr/OMOMO_DATA/OMOMO_p_files/train_diffusion_manip_seq_joints24.p"
+motion_path2 = "/home/learning/Documents/g1-gmr/OMOMO_DATA/OMOMO_p_files/test_diffusion_manip_seq_joints24.p"
 all_motion_data1 = joblib.load(motion_path1)
 all_motion_data2 = joblib.load(motion_path2)
 
