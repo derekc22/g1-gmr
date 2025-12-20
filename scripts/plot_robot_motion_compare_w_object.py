@@ -7,197 +7,304 @@ import numpy as np
 from rotation import quat_wxyz_to_euler
 import re
 
-def plot_root_obj_pos_rot(model_data, retargeted_data, save_dir):
+def compute_sse(model_data, retargeted_data, min_len):
+    """Compute sum of squared errors between model and retargeted data."""
+    return np.sum((model_data[:min_len] - retargeted_data[:min_len])**2)
+
+def plot_root_obj_hand_pos_rot(model_data, retargeted_data, save_dir):
     motion_file = model_data["motion_file"]
     motion_fps_model = model_data["motion_fps"]
     model_root_pos = model_data["motion_root_pos"]
     model_root_rot = model_data["motion_root_rot"]
     model_object_pos = model_data["motion_object_pos"]
     model_object_rot = model_data["motion_object_rot"]
+    model_hand_positions = model_data.get("motion_hand_positions", None)
     source_start = model_data["source_start"]
 
     min_len_model = min([len(model_object_pos), len(model_root_pos)])
-
-    # dt_model = 1/motion_fps_model
-    # start_t = source_start * dt_model
-    # tf_model = (dt_model * min_len_model) + start_t
-    # t_model = np.arange(start_t, tf_model, dt_model)
+    if model_hand_positions is not None:
+        min_len_model = min(min_len_model, len(model_hand_positions))
 
     dt_model = 1/motion_fps_model
     start_t = source_start * dt_model
     tf_model = (min_len_model-1)*dt_model + start_t
     t_model = np.linspace(start_t, tf_model, min_len_model)
 
-
-
     motion_fps_retargeted = retargeted_data["motion_fps"]
     retargeted_root_pos = retargeted_data["motion_root_pos"]
     retargeted_root_rot = retargeted_data["motion_root_rot"]
     retargeted_object_pos = retargeted_data["motion_object_pos"]
     retargeted_object_rot = retargeted_data["motion_object_rot"]
+    retargeted_hand_positions = retargeted_data.get("motion_hand_positions", None)
 
     min_len_retargeted = min([len(retargeted_object_pos), len(retargeted_root_pos)])
-
-    # dt_retargeted = 1/motion_fps_retargeted
-    # tf_retargeted = dt_retargeted * min_len_retargeted
-    # t_retargeted = np.arange(0, tf_retargeted, dt_retargeted)
+    if retargeted_hand_positions is not None:
+        min_len_retargeted = min(min_len_retargeted, len(retargeted_hand_positions))
 
     dt_retargeted = 1/motion_fps_retargeted
-    start_t = source_start * dt_retargeted
     tf_retargeted = (min_len_retargeted-1)*dt_retargeted
     t_retargeted = np.linspace(0, tf_retargeted, min_len_retargeted)
 
+    # Compute minimum length for SSE comparison (use overlapping portion)
+    min_len_compare = min(min_len_model, min_len_retargeted)
 
+    # Determine figure size and layout based on whether hand data is available
+    has_hand_data = model_hand_positions is not None and retargeted_hand_positions is not None
+    if has_hand_data:
+        plt.figure(figsize=(17, 15))  # Taller figure for 6 rows
+        nrows = 6
+    else:
+        plt.figure(figsize=(17, 9))
+        nrows = 4
 
-    plt.figure(figsize=(17, 9))
+    # Convert rotations to euler for comparison
+    retargeted_root_rot_eul = quat_wxyz_to_euler(retargeted_root_rot)
+    retargeted_object_rot_eul = quat_wxyz_to_euler(retargeted_object_rot)
+    model_root_rot_eul = quat_wxyz_to_euler(model_root_rot)
+    model_object_rot_eul = quat_wxyz_to_euler(model_object_rot)
 
     # RETARGETED 
 
-    plt.subplot(4,3,1)
-    plt.plot(t_retargeted, retargeted_root_pos[:, 0], linewidth=2, label="retargeted")
+    # Row 1: Root position
+    sse = compute_sse(model_root_pos[:, 0], retargeted_root_pos[:, 0], min_len_compare)
+    plt.subplot(nrows, 3, 1)
+    plt.plot(t_retargeted, retargeted_root_pos[:min_len_retargeted, 0], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
     plt.ylabel('x_root [m]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,2)
-    plt.plot(t_retargeted, retargeted_root_pos[:, 1], linewidth=2, label="retargeted")
+    sse = compute_sse(model_root_pos[:, 1], retargeted_root_pos[:, 1], min_len_compare)
+    plt.subplot(nrows, 3, 2)
+    plt.plot(t_retargeted, retargeted_root_pos[:min_len_retargeted, 1], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
-    plt.ylabel('y_root [m]')    
+    plt.ylabel('y_root [m]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,3)
-    plt.plot(t_retargeted, retargeted_root_pos[:, 2], linewidth=2, label="retargeted")
+    sse = compute_sse(model_root_pos[:, 2], retargeted_root_pos[:, 2], min_len_compare)
+    plt.subplot(nrows, 3, 3)
+    plt.plot(t_retargeted, retargeted_root_pos[:min_len_retargeted, 2], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
-    plt.ylabel('z_root [m]')    
+    plt.ylabel('z_root [m]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,4)
-    plt.plot(t_retargeted, retargeted_object_pos[:, 0], linewidth=2, label="retargeted")
+    # Row 2: Object position
+    sse = compute_sse(model_object_pos[:, 0], retargeted_object_pos[:, 0], min_len_compare)
+    plt.subplot(nrows, 3, 4)
+    plt.plot(t_retargeted, retargeted_object_pos[:min_len_retargeted, 0], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
     plt.ylabel('x_obj [m]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,5)
-    plt.plot(t_retargeted, retargeted_object_pos[:, 1], linewidth=2, label="retargeted")
+    sse = compute_sse(model_object_pos[:, 1], retargeted_object_pos[:, 1], min_len_compare)
+    plt.subplot(nrows, 3, 5)
+    plt.plot(t_retargeted, retargeted_object_pos[:min_len_retargeted, 1], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
-    plt.ylabel('y_obj [m]')    
+    plt.ylabel('y_obj [m]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,6)
-    plt.plot(t_retargeted, retargeted_object_pos[:, 2], linewidth=2, label="retargeted")
+    sse = compute_sse(model_object_pos[:, 2], retargeted_object_pos[:, 2], min_len_compare)
+    plt.subplot(nrows, 3, 6)
+    plt.plot(t_retargeted, retargeted_object_pos[:min_len_retargeted, 2], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
-    plt.ylabel('z_obj [m]')    
+    plt.ylabel('z_obj [m]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    retargeted_root_rot_eul = quat_wxyz_to_euler(retargeted_root_rot)
-
-    plt.subplot(4,3,7)
-    plt.plot(t_retargeted, retargeted_root_rot_eul[:, 0], linewidth=2, label="retargeted")
+    # Row 3: Root rotation
+    sse = compute_sse(model_root_rot_eul[:, 0], retargeted_root_rot_eul[:, 0], min_len_compare)
+    plt.subplot(nrows, 3, 7)
+    plt.plot(t_retargeted, retargeted_root_rot_eul[:min_len_retargeted, 0], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
     plt.ylabel('roll_root [rad]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,8)
-    plt.plot(t_retargeted, retargeted_root_rot_eul[:, 1], linewidth=2, label="retargeted")
+    sse = compute_sse(model_root_rot_eul[:, 1], retargeted_root_rot_eul[:, 1], min_len_compare)
+    plt.subplot(nrows, 3, 8)
+    plt.plot(t_retargeted, retargeted_root_rot_eul[:min_len_retargeted, 1], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
-    plt.ylabel('pitch_root [rad]')    
+    plt.ylabel('pitch_root [rad]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,9)
-    plt.plot(t_retargeted, retargeted_root_rot_eul[:, 2], linewidth=2, label="retargeted")
+    sse = compute_sse(model_root_rot_eul[:, 2], retargeted_root_rot_eul[:, 2], min_len_compare)
+    plt.subplot(nrows, 3, 9)
+    plt.plot(t_retargeted, retargeted_root_rot_eul[:min_len_retargeted, 2], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
-    plt.ylabel('yaw_root [rad]')    
+    plt.ylabel('yaw_root [rad]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    retargeted_object_rot_eul = quat_wxyz_to_euler(retargeted_object_rot)
-
-    plt.subplot(4,3,10)
-    plt.plot(t_retargeted, retargeted_object_rot_eul[:, 0], linewidth=2, label="retargeted")
+    # Row 4: Object rotation
+    sse = compute_sse(model_object_rot_eul[:, 0], retargeted_object_rot_eul[:, 0], min_len_compare)
+    plt.subplot(nrows, 3, 10)
+    plt.plot(t_retargeted, retargeted_object_rot_eul[:min_len_retargeted, 0], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
     plt.ylabel('roll_obj [rad]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,11)
-    plt.plot(t_retargeted, retargeted_object_rot_eul[:, 1], linewidth=2, label="retargeted")
+    sse = compute_sse(model_object_rot_eul[:, 1], retargeted_object_rot_eul[:, 1], min_len_compare)
+    plt.subplot(nrows, 3, 11)
+    plt.plot(t_retargeted, retargeted_object_rot_eul[:min_len_retargeted, 1], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
-    plt.ylabel('pitch_obj [rad]')    
+    plt.ylabel('pitch_obj [rad]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    plt.subplot(4,3,12)
-    plt.plot(t_retargeted, retargeted_object_rot_eul[:, 2], linewidth=2, label="retargeted")
+    sse = compute_sse(model_object_rot_eul[:, 2], retargeted_object_rot_eul[:, 2], min_len_compare)
+    plt.subplot(nrows, 3, 12)
+    plt.plot(t_retargeted, retargeted_object_rot_eul[:min_len_retargeted, 2], linewidth=2, label="retargeted")
     plt.xlabel('t [s]')
-    plt.ylabel('yaw_obj [rad]')    
+    plt.ylabel('yaw_obj [rad]')
+    plt.title(f'sse = {sse:.4f}')
     plt.grid()
 
-    # MODEL
+    # Row 5 & 6: Hand positions (if available)
+    if has_hand_data:
+        # Left hand
+        sse = compute_sse(model_hand_positions[:, 0], retargeted_hand_positions[:, 0], min_len_compare)
+        plt.subplot(nrows, 3, 13)
+        plt.plot(t_retargeted, retargeted_hand_positions[:min_len_retargeted, 0], linewidth=2, label="retargeted")
+        plt.xlabel('t [s]')
+        plt.ylabel('x_left_hand [m]')
+        plt.title(f'sse = {sse:.4f}')
+        plt.grid()
 
-    plt.subplot(4,3,1)
-    plt.plot(t_model, model_root_pos[:, 0], linewidth=2, label="model")
+        sse = compute_sse(model_hand_positions[:, 1], retargeted_hand_positions[:, 1], min_len_compare)
+        plt.subplot(nrows, 3, 14)
+        plt.plot(t_retargeted, retargeted_hand_positions[:min_len_retargeted, 1], linewidth=2, label="retargeted")
+        plt.xlabel('t [s]')
+        plt.ylabel('y_left_hand [m]')
+        plt.title(f'sse = {sse:.4f}')
+        plt.grid()
+
+        sse = compute_sse(model_hand_positions[:, 2], retargeted_hand_positions[:, 2], min_len_compare)
+        plt.subplot(nrows, 3, 15)
+        plt.plot(t_retargeted, retargeted_hand_positions[:min_len_retargeted, 2], linewidth=2, label="retargeted")
+        plt.xlabel('t [s]')
+        plt.ylabel('z_left_hand [m]')
+        plt.title(f'sse = {sse:.4f}')
+        plt.grid()
+
+        # Right hand
+        sse = compute_sse(model_hand_positions[:, 3], retargeted_hand_positions[:, 3], min_len_compare)
+        plt.subplot(nrows, 3, 16)
+        plt.plot(t_retargeted, retargeted_hand_positions[:min_len_retargeted, 3], linewidth=2, label="retargeted")
+        plt.xlabel('t [s]')
+        plt.ylabel('x_right_hand [m]')
+        plt.title(f'sse = {sse:.4f}')
+        plt.grid()
+
+        sse = compute_sse(model_hand_positions[:, 4], retargeted_hand_positions[:, 4], min_len_compare)
+        plt.subplot(nrows, 3, 17)
+        plt.plot(t_retargeted, retargeted_hand_positions[:min_len_retargeted, 4], linewidth=2, label="retargeted")
+        plt.xlabel('t [s]')
+        plt.ylabel('y_right_hand [m]')
+        plt.title(f'sse = {sse:.4f}')
+        plt.grid()
+
+        sse = compute_sse(model_hand_positions[:, 5], retargeted_hand_positions[:, 5], min_len_compare)
+        plt.subplot(nrows, 3, 18)
+        plt.plot(t_retargeted, retargeted_hand_positions[:min_len_retargeted, 5], linewidth=2, label="retargeted")
+        plt.xlabel('t [s]')
+        plt.ylabel('z_right_hand [m]')
+        plt.title(f'sse = {sse:.4f}')
+        plt.grid()
+
+    # MODEL (overlayed on same subplots)
+
+    # Row 1: Root position
+    plt.subplot(nrows, 3, 1)
+    plt.plot(t_model, model_root_pos[:min_len_model, 0], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('x_root [m]')
     plt.legend()
 
-
-    plt.subplot(4,3,2)
-    plt.plot(t_model, model_root_pos[:, 1], linewidth=2, label="model")
+    plt.subplot(nrows, 3, 2)
+    plt.plot(t_model, model_root_pos[:min_len_model, 1], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('y_root [m]')    
 
-    plt.subplot(4,3,3)
-    plt.plot(t_model, model_root_pos[:, 2], linewidth=2, label="model")
+    plt.subplot(nrows, 3, 3)
+    plt.plot(t_model, model_root_pos[:min_len_model, 2], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('z_root [m]')    
 
-    plt.subplot(4,3,4)
-    plt.plot(t_model, model_object_pos[:, 0], linewidth=2, label="model")
+    # Row 2: Object position
+    plt.subplot(nrows, 3, 4)
+    plt.plot(t_model, model_object_pos[:min_len_model, 0], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('x_obj [m]')
 
-    plt.subplot(4,3,5)
-    plt.plot(t_model, model_object_pos[:, 1], linewidth=2, label="model")
+    plt.subplot(nrows, 3, 5)
+    plt.plot(t_model, model_object_pos[:min_len_model, 1], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('y_obj [m]')    
 
-    plt.subplot(4,3,6)
-    plt.plot(t_model, model_object_pos[:, 2], linewidth=2, label="model")
+    plt.subplot(nrows, 3, 6)
+    plt.plot(t_model, model_object_pos[:min_len_model, 2], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('z_obj [m]')    
 
-    model_root_rot_eul = quat_wxyz_to_euler(model_root_rot)
-
-    plt.subplot(4,3,7)
-    plt.plot(t_model, model_root_rot_eul[:, 0], linewidth=2, label="model")
+    # Row 3: Root rotation
+    plt.subplot(nrows, 3, 7)
+    plt.plot(t_model, model_root_rot_eul[:min_len_model, 0], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('roll_root [rad]')
 
-    plt.subplot(4,3,8)
-    plt.plot(t_model, model_root_rot_eul[:, 1], linewidth=2, label="model")
+    plt.subplot(nrows, 3, 8)
+    plt.plot(t_model, model_root_rot_eul[:min_len_model, 1], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('pitch_root [rad]')    
 
-    plt.subplot(4,3,9)
-    plt.plot(t_model, model_root_rot_eul[:, 2], linewidth=2, label="model")
+    plt.subplot(nrows, 3, 9)
+    plt.plot(t_model, model_root_rot_eul[:min_len_model, 2], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('yaw_root [rad]')    
 
-    model_object_rot_eul = quat_wxyz_to_euler(model_object_rot)
-
-    plt.subplot(4,3,10)
-    plt.plot(t_model, model_object_rot_eul[:, 0], linewidth=2, label="model")
+    # Row 4: Object rotation
+    plt.subplot(nrows, 3, 10)
+    plt.plot(t_model, model_object_rot_eul[:min_len_model, 0], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('roll_obj [rad]')
 
-    plt.subplot(4,3,11)
-    plt.plot(t_model, model_object_rot_eul[:, 1], linewidth=2, label="model")
+    plt.subplot(nrows, 3, 11)
+    plt.plot(t_model, model_object_rot_eul[:min_len_model, 1], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('pitch_obj [rad]')    
 
-    plt.subplot(4,3,12)
-    plt.plot(t_model, model_object_rot_eul[:, 2], linewidth=2, label="model")
+    plt.subplot(nrows, 3, 12)
+    plt.plot(t_model, model_object_rot_eul[:min_len_model, 2], linewidth=2, label="sampled")
     plt.xlabel('t [s]')
     plt.ylabel('yaw_obj [rad]')    
 
-    
+    # Row 5 & 6: Hand positions (if available)
+    if has_hand_data:
+        # Left hand
+        plt.subplot(nrows, 3, 13)
+        plt.plot(t_model, model_hand_positions[:min_len_model, 0], linewidth=2, label="sampled")
+
+        plt.subplot(nrows, 3, 14)
+        plt.plot(t_model, model_hand_positions[:min_len_model, 1], linewidth=2, label="sampled")
+
+        plt.subplot(nrows, 3, 15)
+        plt.plot(t_model, model_hand_positions[:min_len_model, 2], linewidth=2, label="sampled")
+
+        # Right hand
+        plt.subplot(nrows, 3, 16)
+        plt.plot(t_model, model_hand_positions[:min_len_model, 3], linewidth=2, label="sampled")
+
+        plt.subplot(nrows, 3, 17)
+        plt.plot(t_model, model_hand_positions[:min_len_model, 4], linewidth=2, label="sampled")
+
+        plt.subplot(nrows, 3, 18)
+        plt.plot(t_model, model_hand_positions[:min_len_model, 5], linewidth=2, label="sampled")
 
     # TITLE
     
@@ -248,15 +355,13 @@ if __name__ == "__main__":
     motion_retargeted_dataset = []
 
     for motion_model_file in tqdm(motion_model_files):
-        # print(motion_model_file)
-        # exit()
         motion_model_file_base = re.sub(r'^.*?sub(\w*)_sample.*?(\..+?)$', r'sub\1\2', motion_model_file)
         motion_retargeted_path = os.path.join(robot_motion_retargeted_folder, motion_model_file_base)
         # Check if the path exists AND if it is a file
         if os.path.exists(motion_retargeted_path) and os.path.isfile(motion_retargeted_path):
 
             motion_model_path = os.path.join(robot_motion_model_folder, motion_model_file)
-            source_start, motion_data, motion_fps, motion_root_pos, motion_root_rot, motion_dof_pos, motion_object_pos, motion_object_rot, motion_local_body_pos, motion_link_body_list = load_robot_motion_model_w_object(motion_model_path)
+            source_start, motion_data, motion_fps, motion_root_pos, motion_root_rot, motion_dof_pos, motion_object_pos, motion_object_rot, motion_local_body_pos, motion_link_body_list, motion_hand_positions = load_robot_motion_model_w_object(motion_model_path)
             motion_model_dataset.append({
                 "motion_file": motion_model_file,
                 "motion_data": motion_data,
@@ -268,10 +373,11 @@ if __name__ == "__main__":
                 "motion_object_rot": motion_object_rot,
                 "motion_local_body_pos": motion_local_body_pos,
                 "motion_link_body_list": motion_link_body_list,
+                "motion_hand_positions": motion_hand_positions,
                 "source_start": source_start
             })
 
-            motion_data, motion_fps, motion_root_pos, motion_root_rot, motion_dof_pos, motion_object_pos, motion_object_rot, motion_local_body_pos, motion_link_body_list = load_robot_motion_w_object(motion_retargeted_path)
+            motion_data, motion_fps, motion_root_pos, motion_root_rot, motion_dof_pos, motion_object_pos, motion_object_rot, motion_local_body_pos, motion_link_body_list, motion_hand_positions = load_robot_motion_w_object(motion_retargeted_path)
             motion_retargeted_dataset.append({
                 "motion_file": motion_model_file,
                 "motion_data": motion_data,
@@ -283,9 +389,10 @@ if __name__ == "__main__":
                 "motion_object_rot": motion_object_rot,
                 "motion_local_body_pos": motion_local_body_pos,
                 "motion_link_body_list": motion_link_body_list,
+                "motion_hand_positions": motion_hand_positions,
             })
     print("Loading done.")
 
 
     for model_data, retargeted_data in zip(motion_model_dataset[:args.num_motions], motion_retargeted_dataset[:args.num_motions]):
-        plot_root_obj_pos_rot(model_data, retargeted_data, save_dir)
+        plot_root_obj_hand_pos_rot(model_data, retargeted_data, save_dir)

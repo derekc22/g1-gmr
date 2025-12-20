@@ -1,7 +1,7 @@
 import joblib
 import numpy as np
 
-TRAIN_JOBLIB_PATH = "/home/learning/Documents/GMR-master/OMOMO_DATA/OMOMO_p_files/train_diffusion_manip_seq_joints24.p"
+TRAIN_JOBLIB_PATH = "/home/learning/Documents/g1-gmr/OMOMO_DATA/OMOMO_p_files/train_diffusion_manip_seq_joints24.p"
 
 
 def describe_array(name, value, max_slice=3):

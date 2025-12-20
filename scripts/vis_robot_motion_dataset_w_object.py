@@ -45,7 +45,7 @@ if __name__ == "__main__":
     motion_dataset = []
     for motion_file in tqdm(motion_files):
         motion_path = os.path.join(robot_motion_folder, motion_file)
-        motion_data, motion_fps, motion_root_pos, motion_root_rot, motion_dof_pos, motion_object_pos, motion_object_rot, motion_local_body_pos, motion_link_body_list = load_robot_motion_w_object(motion_path)
+        motion_data, motion_fps, motion_root_pos, motion_root_rot, motion_dof_pos, motion_object_pos, motion_object_rot, motion_local_body_pos, motion_link_body_list, motion_hand_positions = load_robot_motion_w_object(motion_path)
         motion_dataset.append({
             "motion_file": motion_file,
             "motion_data": motion_data,
@@ -57,6 +57,7 @@ if __name__ == "__main__":
             "motion_object_rot": motion_object_rot,
             "motion_local_body_pos": motion_local_body_pos,
             "motion_link_body_list": motion_link_body_list,
+            "motion_hand_positions": motion_hand_positions,
         })
     print("Loading done.")
 
@@ -93,4 +94,3 @@ if __name__ == "__main__":
             frame_idx += 1
             if frame_idx >= min_len:
                 frame_idx = 0
-    env.close()
