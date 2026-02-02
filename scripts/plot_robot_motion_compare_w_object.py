@@ -355,7 +355,8 @@ if __name__ == "__main__":
     motion_retargeted_dataset = []
 
     for motion_model_file in tqdm(motion_model_files):
-        motion_model_file_base = re.sub(r'^.*?sub(\w*)_sample.*?(\..+?)$', r'sub\1\2', motion_model_file)
+        # motion_model_file_base = re.sub(r'^.*?sub(\w*)_sample.*?(\..+?)$', r'sub\1\2', motion_model_file)
+        motion_model_file_base = re.sub(r'^.*?sub(\w*)', r'sub\1', motion_model_file)
         motion_retargeted_path = os.path.join(robot_motion_retargeted_folder, motion_model_file_base)
         # Check if the path exists AND if it is a file
         if os.path.exists(motion_retargeted_path) and os.path.isfile(motion_retargeted_path):

@@ -1,6 +1,7 @@
 from general_motion_retargeting import RobotMotionViewerWithObject, load_robot_motion_w_object
 import argparse
 import os
+import re
 from tqdm import tqdm
 
 paused = False
@@ -27,8 +28,9 @@ if __name__ == "__main__":
     parser.add_argument("--robot_motion_folder", type=str, required=True)
 
     parser.add_argument("--record_video", action="store_true")
-    parser.add_argument("--video_path", type=str, 
-                        default="videos/example.mp4")
+    parser.add_argument("--save_dir", type=str, 
+                        default="videos")
+    parser.add_argument("--auto", action="store_true")
                         
     args = parser.parse_args()
     
@@ -37,6 +39,24 @@ if __name__ == "__main__":
     
     if not os.path.exists(robot_motion_folder):
         raise FileNotFoundError(f"Motion data dir {robot_motion_folder} does not exist.")
+    
+    # Parse robot_motion_folder to extract log_id and sample_id for video naming
+    save_dir = args.save_dir
+    pattern = r'logs/(.*?)/samples/(.*)'
+    match = re.search(pattern, robot_motion_folder)
+    if match:
+        log_id = match.group(1)
+        sample_id = match.group(2)
+        video_dir = os.path.join(save_dir, log_id, sample_id)
+        video_path = os.path.join(video_dir, "render.mp4")
+    else:
+        # Fallback: use folder name as video name
+        folder_name = os.path.basename(robot_motion_folder.rstrip('/'))
+        video_dir = save_dir
+        video_path = os.path.join(video_dir, f"{folder_name}.mp4")
+    
+    os.makedirs(video_dir, exist_ok=True)
+    print(f"Video will be saved to: {video_path}")
     
     motion_files = [f for f in os.listdir(robot_motion_folder) if f.endswith('.pkl')]
     motion_files = sorted(motion_files)
@@ -64,7 +84,7 @@ if __name__ == "__main__":
     env = RobotMotionViewerWithObject(robot_type=robot_type,
                             motion_fps=motion_fps,
                             camera_follow=False,
-                            record_video=args.record_video, video_path=args.video_path, 
+                            record_video=args.record_video, video_path=video_path, 
                             keyboard_callback=keyboard_callback)
     
     frame_idx = 0
@@ -93,4 +113,10 @@ if __name__ == "__main__":
                     rate_limit=True)
             frame_idx += 1
             if frame_idx >= min_len:
-                frame_idx = 0
+                if args.auto:
+                    motion_id += 1
+                    if motion_id == motion_num:
+                        terminate = True
+                else:
+                    frame_idx = 0
+    env.close()
