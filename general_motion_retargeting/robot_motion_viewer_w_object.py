@@ -1,5 +1,8 @@
 import os
+import re
 import time
+import tempfile
+from pathlib import Path
 import mujoco as mj
 import mujoco.viewer as mjv
 import imageio
@@ -8,6 +11,103 @@ from general_motion_retargeting import ROBOT_XML_DICT, ROBOT_BASE_DICT, VIEWER_C
 from loop_rate_limiters import RateLimiter
 import numpy as np
 from rich import print
+
+
+def _xml_escape_attr(value):
+    return str(value).replace("&", "&amp;").replace('"', "&quot;")
+
+
+def _center_obj_mesh(mesh_path, output_path, scale=1.0):
+    """Write a copy of an OBJ whose vertex centroid is at the local origin."""
+    mesh_path = Path(mesh_path)
+    output_path = Path(output_path)
+    lines = mesh_path.read_text().splitlines()
+
+    vertices = []
+    for line in lines:
+        if line.startswith("v "):
+            parts = line.split()
+            if len(parts) >= 4:
+                vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
+
+    if not vertices:
+        raise ValueError(f"No vertices found in object mesh: {mesh_path}")
+
+    center = np.asarray(vertices, dtype=np.float64).mean(axis=0)
+    vertex_idx = 0
+    with output_path.open("w") as f:
+        for line in lines:
+            if line.startswith("v "):
+                parts = line.split()
+                if len(parts) >= 4:
+                    xyz = (np.asarray(vertices[vertex_idx], dtype=np.float64) - center) * scale
+                    rest = parts[4:]
+                    f.write(f"v {xyz[0]:.9g} {xyz[1]:.9g} {xyz[2]:.9g}")
+                    if rest:
+                        f.write(" " + " ".join(rest))
+                    f.write("\n")
+                    vertex_idx += 1
+                    continue
+            f.write(line + "\n")
+
+    return center
+
+
+def _build_object_mesh_xml(base_xml_path, object_mesh_path, object_mesh_scale=1.0):
+    """Create a temporary MuJoCo XML replacing the placeholder object box with a mesh."""
+    base_xml_path = Path(base_xml_path)
+    object_mesh_path = Path(object_mesh_path)
+    if not object_mesh_path.exists():
+        raise FileNotFoundError(f"Object mesh not found: {object_mesh_path}")
+
+    tmpdir = tempfile.TemporaryDirectory(prefix="gmr_object_mesh_")
+    tmp_path = Path(tmpdir.name)
+    centered_mesh_path = tmp_path / f"{object_mesh_path.stem}_centered.obj"
+    _center_obj_mesh(object_mesh_path, centered_mesh_path, scale=object_mesh_scale)
+
+    xml = base_xml_path.read_text()
+    def absolutize_meshdir(match):
+        meshdir = Path(match.group(2))
+        if not meshdir.is_absolute():
+            meshdir = base_xml_path.parent / meshdir
+        return f'{match.group(1)}{_xml_escape_attr(meshdir)}{match.group(3)}'
+
+    xml = re.sub(
+        r'(<compiler\b[^>]*\bmeshdir=")([^"]*)(")',
+        absolutize_meshdir,
+        xml,
+        count=1,
+    )
+
+    mesh_asset = (
+        f'    <mesh name="render_object_mesh" '
+        f'file="{_xml_escape_attr(centered_mesh_path)}"/>\n'
+    )
+    if "</asset>" not in xml:
+        tmpdir.cleanup()
+        raise ValueError(f"Could not find </asset> in {base_xml_path}")
+    xml = xml.replace("  </asset>", mesh_asset + "  </asset>", 1)
+
+    object_body = """    <body name="object">
+      <joint name="object" type="free"/>
+      <geom name="object" type="mesh" mesh="render_object_mesh" mass="0.01" contype="0" conaffinity="0" rgba="0.72 0.58 0.42 1"/>
+    </body>"""
+
+    pattern = re.compile(
+        r"\s*<body name=\"object\">\s*"
+        r"<joint name=\"object\" type=\"free\"\s*/>\s*"
+        r"<geom name=\"object\" type=\"box\"[^>]*(?:></geom>|/>)\s*"
+        r"</body>",
+        re.DOTALL,
+    )
+    xml, num_replaced = pattern.subn("\n" + object_body, xml, count=1)
+    if num_replaced != 1:
+        tmpdir.cleanup()
+        raise ValueError(f"Could not replace placeholder object body in {base_xml_path}")
+
+    xml_path = tmp_path / f"{base_xml_path.stem}_{object_mesh_path.stem}.xml"
+    xml_path.write_text(xml)
+    return tmpdir, xml_path
 
 
 def draw_frame(
@@ -54,10 +154,20 @@ class RobotMotionViewerWithObject:
                 video_width=640,
                 video_height=480,
                 keyboard_callback=None,
+                object_mesh_path=None,
+                object_mesh_scale=1.0,
                 ):
         
         self.robot_type = robot_type
         self.xml_path = ROBOT_XML_DICT[robot_type]
+        self._object_mesh_tmpdir = None
+        if object_mesh_path is not None:
+            self._object_mesh_tmpdir, self.xml_path = _build_object_mesh_xml(
+                self.xml_path,
+                object_mesh_path,
+                object_mesh_scale=object_mesh_scale,
+            )
+            print(f"Rendering object mesh: {object_mesh_path} (scale={object_mesh_scale:.6g})")
         self.model = mj.MjModel.from_xml_path(str(self.xml_path))
         self.data = mj.MjData(self.model)
         self.robot_base = ROBOT_BASE_DICT[robot_type]
@@ -163,3 +273,5 @@ class RobotMotionViewerWithObject:
         if self.record_video:
             self.mp4_writer.close()
             print(f"Video saved to {self.video_path}")
+        if self._object_mesh_tmpdir is not None:
+            self._object_mesh_tmpdir.cleanup()

@@ -29,7 +29,8 @@ if __name__ == "__main__":
     parser.add_argument("--record_video", action="store_true")
     parser.add_argument("--video_path", type=str, 
                         default="videos/example.mp4")
-                        
+    parser.add_argument("--auto", action="store_true")
+                    
     args = parser.parse_args()
     
     robot_type = args.robot
@@ -86,5 +87,10 @@ if __name__ == "__main__":
                     rate_limit=True)
             frame_idx += 1
             if frame_idx >= len(motion_root_pos):
-                frame_idx = 0
+                if args.auto:
+                    motion_id += 1
+                    if motion_id == motion_num:
+                        terminate = True
+                else:
+                    frame_idx = 0
     env.close()
